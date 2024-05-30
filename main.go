@@ -226,7 +226,7 @@ func (g *GeminiSpider) errQueue() {
 			// 这是被封了
 			//"message": "Quota exceeded for quota metric 'Generate Content API requests per minute' and limit 'GenerateContent request limit per minute for a region' of service 'generativelanguage.googleapis.com' for consumer 'project_num
 			if strings.Contains(errRet.message, "Quota exceeded for quota metric") {
-				_, err := db.Exec("update  from `keys` set status = 0, `error` = ? where `key` = ?", errRet.message, errRet.key)
+				_, err := db.Exec("update `keys` set status = 0, `error` = ? where `key` = ?", errRet.message, errRet.key)
 				if err != nil {
 					log.Println(err)
 				}
@@ -234,7 +234,7 @@ func (g *GeminiSpider) errQueue() {
 			}
 
 			// 其他错误 一律休眠一分钟
-			_, err := db.Exec("update  from `keys` set `active_ts` = ?, `error` = ? where `key` = ?", time.Now().Unix()+60, errRet.message, errRet.key)
+			_, err := db.Exec("update `keys` set `active_ts` = ?, `error` = ? where `key` = ?", time.Now().Unix()+60, errRet.message, errRet.key)
 			if err != nil {
 				log.Println(err)
 				break
