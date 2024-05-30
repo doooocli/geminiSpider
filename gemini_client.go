@@ -53,7 +53,13 @@ func getUserAgent() string {
 }
 
 func NewGenClient(ctx context.Context, key, proxyUrl string) (*genai.Client, error) {
-	c := NewHttpClient(key, proxyUrl)
+	c := &http.Client{
+		Timeout: 60 * time.Second,
+		Transport: &ProxyRoundTripper{
+			APIKey:   key,
+			ProxyURL: proxyUrl,
+		},
+	}
 	return genai.NewClient(ctx,
 		option.WithUserAgent(getUserAgent()),
 		option.WithHTTPClient(c),
