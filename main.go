@@ -11,12 +11,13 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
 
 const (
-	promptText = `Tulis artikel 1500 kata yang dioptimalkan untuk seo tentang \"game\".\n                Gunakan tag <h1>untuk judul artikel keseluruhan dan tag <h2> untuk judul bagian.\n                Selalu gunakan nada emosi dan prioritaskan kejelasan daripada struktur kalimat yang rumit.\n                Gunakan personifikasi, metafora, pertanyaan retoris, pertanyaan retoris, dan kontras dalam setiap kalimat agar tidak berlebihan.\n                Lebih banyak menggunakan pertanyaan retoris dan perbandingan.\n                Tulis judul pendek yang layak untuk diklik.\n                Setiap kalimat hendaknya menggunakan pola kalimat khusus seperti inversi dan penghilangan untuk mendiversifikasi bentuk penulisan.\n                Tulis perkenalan kepada penulis dan hasilkan satu penulis asli dan cantumkan tautan profil linkedin asli.\n                Langkah 1 - hasilkan 6 pengetahuan keahlian atau tip tentang \"game\".\n                Langkah 1 - hasilkan 6 pengetahuan keahlian atau tip tentang \"game\".\n                Langkah 2 - ambil kata kunci pertama dari daftar dari Langkah 1 dan tulis artikel 10 paragraf menggunakan format penurunan harga, daftar dan tabel, solusi detail dengan pendekatan langkah demi langkah.\n                Langkah 3 - ambil kata kunci ke-2 dari daftar dari Langkah 1 dan tulis artikel 10 paragraf menggunakan format penurunan harga, solusi terperinci, dan buat satu tabel yang berguna.\n                Langkah 4 - ambil kata kunci ke-3 dari daftar dari Langkah 1 dan tulis artikel 10 paragraf menggunakan format penurunan harga, solusi detail.\n                Langkah 5 - ambil kata kunci ke-4 dari daftar dari Langkah 1 dan tulis artikel 10 paragraf menggunakan format penurunan harga, solusi detail, dan buat satu daftar yang berguna.\n                Langkah 6 - ambil kata kunci ke-5 dari daftar dari Langkah 1 dan tulis artikel 10 paragraf menggunakan format penurunan harga, daftar dan tabel, solusi terperinci dengan pendekatan langkah demi langkah.\n                Langkah 7 - ambil kata kunci ke-6 dari daftar dari Langkah 1 dan tulis artikel 10 paragraf menggunakan format penurunan harga, daftar dan tabel, solusi detail, dan hasilkan satu tabel yang berguna.\n                Hasilkan 6 manfaat bagi pengguna.\n                Hasilkan dua tabel berguna untuk artikel di atas dan integrasikan secara alami.\n                Menghasilkan sejumlah besar angka yang diterbitkan oleh banyak organisasi berwenang dan menyediakan sumber serta informasi pengecekan fakta.\n                Hasilkan 2 organisasi otoritatif dan informasi pengecekan fakta untuk membantu orang.\n                Hasilkan 5 tips berguna untuk berbagi.\n                Hasilkan 5 faq berguna diikuti dengan skema FAQPage.`
+	promptTpl = `Tulis artikel 1500 kata yang dioptimalkan untuk seo tentang \"#keyword#\".\n                Gunakan tag <h1>untuk judul artikel keseluruhan dan tag <h2> untuk judul bagian.\n                Selalu gunakan nada emosi dan prioritaskan kejelasan daripada struktur kalimat yang rumit.\n                Gunakan personifikasi, metafora, pertanyaan retoris, pertanyaan retoris, dan kontras dalam setiap kalimat agar tidak berlebihan.\n                Lebih banyak menggunakan pertanyaan retoris dan perbandingan.\n                Tulis judul pendek yang layak untuk diklik.\n                Setiap kalimat hendaknya menggunakan pola kalimat khusus seperti inversi dan penghilangan untuk mendiversifikasi bentuk penulisan.\n                Tulis perkenalan kepada penulis dan hasilkan satu penulis asli dan cantumkan tautan profil linkedin asli.\n                Langkah 1 - hasilkan 6 pengetahuan keahlian atau tip tentang \"#keyword#\".\n                Langkah 1 - hasilkan 6 pengetahuan keahlian atau tip tentang \"game\".\n                Langkah 2 - ambil kata kunci pertama dari daftar dari Langkah 1 dan tulis artikel 10 paragraf menggunakan format penurunan harga, daftar dan tabel, solusi detail dengan pendekatan langkah demi langkah.\n                Langkah 3 - ambil kata kunci ke-2 dari daftar dari Langkah 1 dan tulis artikel 10 paragraf menggunakan format penurunan harga, solusi terperinci, dan buat satu tabel yang berguna.\n                Langkah 4 - ambil kata kunci ke-3 dari daftar dari Langkah 1 dan tulis artikel 10 paragraf menggunakan format penurunan harga, solusi detail.\n                Langkah 5 - ambil kata kunci ke-4 dari daftar dari Langkah 1 dan tulis artikel 10 paragraf menggunakan format penurunan harga, solusi detail, dan buat satu daftar yang berguna.\n                Langkah 6 - ambil kata kunci ke-5 dari daftar dari Langkah 1 dan tulis artikel 10 paragraf menggunakan format penurunan harga, daftar dan tabel, solusi terperinci dengan pendekatan langkah demi langkah.\n                Langkah 7 - ambil kata kunci ke-6 dari daftar dari Langkah 1 dan tulis artikel 10 paragraf menggunakan format penurunan harga, daftar dan tabel, solusi detail, dan hasilkan satu tabel yang berguna.\n                Hasilkan 6 manfaat bagi pengguna.\n                Hasilkan dua tabel berguna untuk artikel di atas dan integrasikan secara alami.\n                Menghasilkan sejumlah besar angka yang diterbitkan oleh banyak organisasi berwenang dan menyediakan sumber serta informasi pengecekan fakta.\n                Hasilkan 2 organisasi otoritatif dan informasi pengecekan fakta untuk membantu orang.\n                Hasilkan 5 tips berguna untuk berbagi.\n                Hasilkan 5 faq berguna diikuti dengan skema FAQPage.`
 
 	promptText2 = "Explain how AI works"
 
@@ -37,6 +38,7 @@ const (
 type genRet struct {
 	key      string
 	proxyUrl string
+	keyword  string
 	prompt   string
 	content  string
 }
@@ -56,6 +58,7 @@ type GeminiSpider struct {
 	genaiClientPool *GenaiClientPool    // gemini客户端
 	retCh           chan *genRet        // 生成内容异步入库
 	errCh           chan *genErr        // 异步处理错误
+	keywordQueue    *SafeQueue[string]
 }
 
 func NewGeminiSpider(ctx context.Context) *GeminiSpider {
@@ -70,8 +73,9 @@ func NewGeminiSpider(ctx context.Context) *GeminiSpider {
 		genaiClientPool: &GenaiClientPool{
 			httpProxyPool: viper.GetStringSlice("app.httpProxyPool"),
 		},
-		retCh: make(chan *genRet, 10000),
-		errCh: make(chan *genErr, 10000),
+		retCh:        make(chan *genRet, 10000),
+		errCh:        make(chan *genErr, 10000),
+		keywordQueue: NewSafeQueue[string](),
 	}
 }
 
@@ -99,9 +103,10 @@ type generateContentResponse struct {
 }
 
 // 不使用gemini官方sdk
-func (g *GeminiSpider) handler(ctx context.Context, key string) error {
+func (g *GeminiSpider) handler(ctx context.Context, key, keyword string) error {
 	proxyUrl := g.genaiClientPool.getProxyURL(key)
 	client := NewHttpClient(key, proxyUrl)
+	promptText := strings.Replace(promptTpl, "#keyword#", keyword, -1)
 	req, err := http.NewRequest(
 		"POST",
 		fmt.Sprintf("https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=%s", key),
@@ -138,11 +143,11 @@ func (g *GeminiSpider) handler(ctx context.Context, key string) error {
 		return nil
 	}
 	//log.Printf("repText = %s\n", string(data))
-	g.printResponse(key, proxyUrl, promptText, repText)
+	g.printResponse(key, proxyUrl, keyword, promptText, repText)
 	return err
 }
 
-func (g *GeminiSpider) printResponse(key, proxyUrl, prompt string, resp *generateContentResponse) {
+func (g *GeminiSpider) printResponse(key, proxyUrl, keyword, prompt string, resp *generateContentResponse) {
 	for _, cand := range resp.Candidates {
 		if cand.Content != nil {
 			for _, part := range cand.Content.Parts {
@@ -150,6 +155,7 @@ func (g *GeminiSpider) printResponse(key, proxyUrl, prompt string, resp *generat
 					key:      key,
 					proxyUrl: proxyUrl,
 					prompt:   prompt,
+					keyword:  keyword,
 					content:  fmt.Sprintf("%v", part),
 				}
 			}
@@ -160,7 +166,7 @@ func (g *GeminiSpider) printResponse(key, proxyUrl, prompt string, resp *generat
 }
 
 // 使用官方sdk
-func (g *GeminiSpider) handlerWithSdk(ctx context.Context, key string) error {
+func (g *GeminiSpider) handlerWithSdk(ctx context.Context, key, keyword string) error {
 	proxyUrl := g.genaiClientPool.getProxyURL(key)
 	client, err := NewGenClient(ctx, key, proxyUrl)
 	if err != nil {
@@ -173,8 +179,9 @@ func (g *GeminiSpider) handlerWithSdk(ctx context.Context, key string) error {
 	}
 	defer client.Close()
 	log.Printf("gen start %s - %s \n", key, proxyUrl)
-
 	model := client.GenerativeModel("gemini-pro")
+
+	promptText := strings.Replace(promptTpl, "#keyword#", keyword, -1)
 	repText, err := model.GenerateContent(ctx, genai.Text(promptText))
 	if err != nil {
 		log.Printf("GenerateContent err %s - %v", key, err)
@@ -184,17 +191,18 @@ func (g *GeminiSpider) handlerWithSdk(ctx context.Context, key string) error {
 		g.errCh <- &genErr{key: key, message: err.Error()}
 		return err
 	}
-	g.printSdkResponse(key, proxyUrl, promptText, repText)
+	g.printSdkResponse(key, proxyUrl, keyword, promptText, repText)
 	return nil
 }
 
-func (g *GeminiSpider) printSdkResponse(key, proxyUrl, prompt string, resp *genai.GenerateContentResponse) {
+func (g *GeminiSpider) printSdkResponse(key, proxyUrl, keyword, prompt string, resp *genai.GenerateContentResponse) {
 	for _, cand := range resp.Candidates {
 		if cand.Content != nil {
 			for _, part := range cand.Content.Parts {
 				g.retCh <- &genRet{
 					key:      key,
 					proxyUrl: proxyUrl,
+					keyword:  keyword,
 					prompt:   prompt,
 					content:  fmt.Sprintf("%v", part),
 				}
@@ -209,9 +217,14 @@ func (g *GeminiSpider) retQueue() {
 	for {
 		select {
 		case ret := <-g.retCh:
-			_, err := db.Exec("INSERT INTO `gen` (`key`, `proxy`, `prompt`, `content`) VALUES (?,?,?,?)", ret.key, ret.proxyUrl, ret.prompt, ret.content)
+			_, err := db.Exec("INSERT INTO `gen` (`key`, `proxy`, `keyword`, `prompt`, `content`) VALUES (?,?,?,?,?)", ret.key, ret.proxyUrl, ret.keyword, ret.prompt, ret.content)
 			if err != nil {
-				log.Println(err)
+				log.Printf("INSERT gen err %v\n", err)
+				return
+			}
+			_, err = db.Exec("UPDATE `keyword` set `status` = 1 where `keyword` = ?", ret.keyword)
+			if err != nil {
+				log.Printf("UPDATE keyword err %v\n", err)
 				return
 			}
 		}
@@ -251,6 +264,7 @@ func loadKeys() []string {
 		log.Printf("loadKeys err %d %v\n", ts, err)
 		return []string{}
 	}
+	defer rows.Close()
 
 	var keyPool []string
 	for rows.Next() {
@@ -263,6 +277,33 @@ func loadKeys() []string {
 	return keyPool
 }
 
+func (g *GeminiSpider) loadKeyWord() {
+	for {
+		rows, err := db.Query("select `keyword` from `keyword` where `status` = 0 limit 10")
+		if err != nil {
+			log.Printf("query Keyword err %v\n", err)
+			os.Exit(1)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+
+			var kw string
+			err := rows.Scan(&kw)
+			if err == nil {
+				g.keywordQueue.Push(kw)
+			}
+		}
+
+		if g.keywordQueue.IsEmpty() {
+			log.Printf("等待关键词装填 10s \n")
+			<-time.After(time.Second * 10)
+		}
+		break
+	}
+
+}
+
 func (g *GeminiSpider) loopKey() {
 	for {
 		for _, key := range g.keyPool {
@@ -273,16 +314,27 @@ func (g *GeminiSpider) loopKey() {
 				if _, ok := g.dirtyKeys[key]; ok {
 					continue
 				}
+
+				if g.keywordQueue.IsEmpty() {
+					// 装填关键词
+					g.loadKeyWord()
+				}
+
 				g.scheduler.dispatch(func(ctx context.Context) {
+					// 获取关键词
+					kw, ok := g.keywordQueue.Pop()
+					if !ok {
+						return
+					}
 
 					// 直接发送post请求
-					//if err := g.handler(ctx, key); err != nil {
+					//if err := g.handler(ctx, key, kw); err != nil {
 					//	log.Println("dirty key " + key)
 					//	g.dirtyKeys[key] = struct{}{}
 					//}
 
 					// 使用官方的sdk
-					if err := g.handlerWithSdk(ctx, key); err != nil {
+					if err := g.handlerWithSdk(ctx, key, kw); err != nil {
 						log.Println("dirty key " + key)
 						g.dirtyKeys[key] = struct{}{}
 					}
@@ -297,6 +349,7 @@ func (g *GeminiSpider) loopKey() {
 			g.dirtyKeys = make(map[string]struct{}) // 清空
 			g.keyPool = loadKeys()
 			if len(g.keyPool) == 0 {
+				log.Printf("等待gemini key装填...")
 				// 数据库没key，每十秒查询一次
 				<-time.After(10 * time.Second)
 			}
